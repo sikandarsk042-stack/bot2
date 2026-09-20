@@ -8,10 +8,9 @@ User ka flow:
    - CONNECT SUPPORT TEAM  -> support ki ID dikhata hai
    - ALREADY BUY UNDER YOU -> verification flow shuru (neeche step 2 se)
 2. Name
-3. Email
-4. Broker select (button): Vantage Broker / FORTRESS FX / XM 360 / ByteFx Broker
-   (broker ke buttons ke sath "Change Partner" aur "Contact Support" buttons bhi hain)
-5. UID (MT5)
+3. Email (propfirm account wali)
+4. Prop Firm
+5. Account Size
 6. Bot saari details dikhata hai -> user "Confirm" ya "Edit" dabata hai
 7. Confirm par data Google Sheet mein "Pending" status ke sath save hota hai
 
@@ -28,7 +27,6 @@ Duplicate se bachao:
 - Pending/Approved user dobara submit nahi kar sakta
 - Rejected user dobara submit kare to usi row ko update kiya jata hai (nayi row nahi banti)
 - Removed user dobara submit nahi kar sakta
-- Ek hi broker ka ek hi UID (MT5) do alag Telegram accounts se submit nahi ho sakta
 """
 
 import os
@@ -66,8 +64,6 @@ SKIP_DUPLICATE_CHECK_FOR = ADMIN_CHAT_IDS
 PRIVATE_GROUP_CHAT_ID = -1004372780406        # GOLD INSIGHT - PROP FIRM (channel)
 CLUB_NAME = "GOLD INSIGHT - PROP FIRM"
 SHEET_NAME = "GOLD INSIGHT DETAILS"           # Google Sheet ka naam (bilkul yehi)
-BROKERS = ["Vantage Broker", "FORTRESS FX", "XM 360", "ByteFx Broker"]
-PARTNER_FORM_URL = "https://forms.gle/NAQJKgG168gpLFbK7"  # "Change Partner" par ye form dikhta hai
 FUNDED_BUY_URL = "https://forms.gle/ujbT4v5mXy4eqGHeA"    # "FUNDED BUY" par ye form dikhta hai
 SUPPORT_USERNAME = "LegitFundedTeam"                      # support ki ID (bina @ ke)
 GOOGLE_CREDENTIALS_FILE = "credentials.json"  # sirf apne computer par test ke liye
@@ -82,7 +78,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # logs mein bot token na a
 logger = logging.getLogger(__name__)
 
 # Conversation states
-NAME, EMAIL, BROKER, UID, CONFIRM, WELCOME = range(6)
+NAME, EMAIL, PROPFIRM, SIZE, CONFIRM, WELCOME = range(6)
 TEXT_ONLY = filters.TEXT & ~filters.COMMAND
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -97,7 +93,7 @@ def support_markup():
 REJECTED_TEXT = (
     "⚠️ <b>We couldn't verify your details</b>\n\n"
     "It looks like something in the information you submitted isn't correct "
-    "(for example, your UID or email), so we weren't able to verify it.\n\n"
+    "(for example, your email or prop firm details), so we weren't able to verify it.\n\n"
     "Please contact our support team — they'll help you sort it out quickly 🤝\n"
     f"👉 @{SUPPORT_USERNAME}\n\n"
     "You can also send /start to submit your details again."
@@ -124,13 +120,6 @@ APPROVED_TEXT = (
     f"👉 @{SUPPORT_USERNAME}"
 )
 
-UID_TAKEN_TEXT = (
-    "⚠️ <b>This UID (MT5) has already been submitted with another account.</b>\n\n"
-    "Please double-check your UID and send it again. If you think this is a mistake, "
-    "contact our support team:\n"
-    f"👉 @{SUPPORT_USERNAME}"
-)
-
 
 def duplicate_reply(kind):
     """(text, keyboard) - duplicate/purani request wale users ke liye."""
@@ -138,14 +127,13 @@ def duplicate_reply(kind):
         "pending": (PENDING_TEXT, None),
         "approved": (APPROVED_TEXT, support_markup()),
         "removed": (REMOVED_TEXT, support_markup()),
-        "uid_taken": (UID_TAKEN_TEXT, support_markup()),
     }[kind]
 
 
 # ---------------- Google Sheet helpers ----------------
 HEADERS = [
-    "Date", "Telegram ID", "Username", "Name", "Email", "Broker",
-    "UID (MT5)", "Status", "Bot Action", "Invite Link",
+    "Date", "Telegram ID", "Username", "Name", "Email", "Prop Firm",
+    "Account Size", "Status", "Bot Action", "Invite Link",
 ]
 COL = {h: i for i, h in enumerate(HEADERS)}  # 0-based column index
 STATUS_OPTIONS = ["Pending", "Approved", "Rejected", "Removed"]
@@ -266,56 +254,42 @@ def get_sheet():
 
 
 class DuplicateError(Exception):
-    """kind: pending / approved / removed / uid_taken"""
+    """kind: pending / approved / removed"""
 
     def __init__(self, kind):
         super().__init__(kind)
         self.kind = kind
 
 
-def norm(value):
-    return str(value).strip().lower()
-
-
-def find_conflict(rows, user_id, broker=None, uid=None):
+def find_conflict(rows, user_id):
     """
     Sheet ki rows dekh kar batao (kind, row_number):
       pending / approved / removed -> is Telegram account ki pehle se row hai
-      uid_taken                    -> yehi broker + UID kisi aur account ne de rakha hai
       resubmit                     -> pehle Rejected hua tha, usi row ko update karna hai
       None                         -> bilkul nayi request
     """
     own = {}  # status -> aakhri row number
-    uid_taken = False
     for row_num, r in enumerate(rows[1:], start=2):  # header chhor kar
         r = r + [""] * (len(HEADERS) - len(r))
         status = r[COL["Status"]].strip() or "Pending"
         if r[COL["Telegram ID"]].strip() == str(user_id):
             own[status] = row_num
-        elif (
-            broker and uid and status != "Rejected"
-            and norm(r[COL["Broker"]]) == norm(broker)
-            and norm(r[COL["UID (MT5)"]]) == norm(uid)
-        ):
-            uid_taken = True
 
     for kind, status in (("approved", "Approved"), ("pending", "Pending"), ("removed", "Removed")):
         if status in own:
             return kind, own[status]
-    if uid_taken:
-        return "uid_taken", None
     if "Rejected" in own:
         return "resubmit", own["Rejected"]
     return None, None
 
 
-def check_conflict(user_id, broker=None, uid=None):
+def check_conflict(user_id):
     with _lock:
         rows = get_sheet().get_all_values()
-    return find_conflict(rows, user_id, broker, uid)
+    return find_conflict(rows, user_id)
 
 
-def save_request(user_id, username, name, email, broker, uid):
+def save_request(user_id, username, name, email, propfirm, size):
     """
     Request save karo. Duplicate ho to DuplicateError uthata hai.
     Return: "new" (nayi row) ya "resubmitted" (Rejected wali row update hui).
@@ -324,8 +298,8 @@ def save_request(user_id, username, name, email, broker, uid):
         ws = get_sheet()
         kind, row_num = None, None
         if user_id not in SKIP_DUPLICATE_CHECK_FOR:
-            kind, row_num = find_conflict(ws.get_all_values(), user_id, broker, uid)
-        if kind in ("pending", "approved", "removed", "uid_taken"):
+            kind, row_num = find_conflict(ws.get_all_values(), user_id)
+        if kind in ("pending", "approved", "removed"):
             raise DuplicateError(kind)
 
         values = {
@@ -334,8 +308,8 @@ def save_request(user_id, username, name, email, broker, uid):
             "Username": username,
             "Name": name,
             "Email": email,
-            "Broker": broker,
-            "UID (MT5)": uid,
+            "Prop Firm": propfirm,
+            "Account Size": size,
             "Status": "Pending",
         }
         row = [values.get(h, "") for h in HEADERS[: COL["Status"] + 1]]
@@ -501,18 +475,6 @@ def welcome_keyboard():
     ])
 
 
-def broker_keyboard():
-    buttons = [InlineKeyboardButton(b, callback_data=f"broker_{i}") for i, b in enumerate(BROKERS)]
-    return InlineKeyboardMarkup([
-        buttons[:2],
-        buttons[2:],
-        [
-            InlineKeyboardButton("🔄 Change Partner", callback_data="partner"),
-            InlineKeyboardButton("💬 Contact Support", callback_data="support"),
-        ],
-    ])
-
-
 def confirm_keyboard():
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Confirm & Submit", callback_data="confirm"),
@@ -527,8 +489,8 @@ def edit_keyboard():
             InlineKeyboardButton("📧 Email", callback_data="edit_email"),
         ],
         [
-            InlineKeyboardButton("🏦 Broker", callback_data="edit_broker"),
-            InlineKeyboardButton("🆔 UID (MT5)", callback_data="edit_uid"),
+            InlineKeyboardButton("🏢 Prop Firm", callback_data="edit_firm"),
+            InlineKeyboardButton("💵 Account Size", callback_data="edit_size"),
         ],
         [InlineKeyboardButton("⬅️ Back", callback_data="back")],
     ])
@@ -538,8 +500,8 @@ def details_block(d):
     return (
         f"👤 Name: {escape(d['name'])}\n"
         f"📧 Email: {escape(d['email'])}\n"
-        f"🏦 Broker: {escape(d['broker'])}\n"
-        f"🆔 UID (MT5): {escape(d['uid'])}"
+        f"🏢 Prop Firm: {escape(d['propfirm'])}\n"
+        f"💵 Account Size: {escape(d['size'])}"
     )
 
 
@@ -614,10 +576,7 @@ async def already_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_reply_markup(reply_markup=None)  # buttons hata do
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=(
-            "🔓 One final step — verify your broker account below to unlock access.\n\n"
-            "First, send me your <b>full name</b>:"
-        ),
+        text="Let's get to work. First, send me your <b>full name</b>:",
         parse_mode="HTML",
     )
     return NAME
@@ -628,7 +587,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.pop("editing", False):
         return await show_summary(update, context)
     await update.message.reply_text(
-        "Got it. Now send your <b>email</b> (the one you used to sign up with your broker):",
+        "Got it. Now send your <b>Email</b> (the one you used to sign up with your propfirm account) :-",
         parse_mode="HTML",
     )
     return EMAIL
@@ -644,64 +603,22 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["email"] = email
     if context.user_data.pop("editing", False):
         return await show_summary(update, context)
-    await update.message.reply_text(
-        "Which broker is your account with? Tap one below 👇",
-        reply_markup=broker_keyboard(),
-    )
-    return BROKER
+    await update.message.reply_text("Which <b>Prop Firm</b> Should You Buy ?", parse_mode="HTML")
+    return PROPFIRM
 
 
-async def broker_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    broker = BROKERS[int(query.data.split("_")[1])]
-    context.user_data["broker"] = broker
-    await query.edit_message_text(f"🏦 Broker: {broker}")
+async def get_propfirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["propfirm"] = clean(update.message.text)
     if context.user_data.pop("editing", False):
         return await show_summary(update, context)
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"Now send your {escape(broker)} <b>UID (MT5)</b>:",
-        parse_mode="HTML",
-    )
-    return UID
+    await update.message.reply_text("<b>Account Size</b> :-", parse_mode="HTML")
+    return SIZE
 
 
-async def get_uid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = clean(update.message.text)
-    user = update.effective_user
-
-    # Ye UID + broker kisi aur account ne pehle hi de rakha hai?
-    if user.id not in SKIP_DUPLICATE_CHECK_FOR:
-        try:
-            kind, _ = await asyncio.to_thread(
-                check_conflict, user.id, context.user_data.get("broker"), uid
-            )
-        except Exception as e:
-            logger.error(f"UID check error: {type(e).__name__}: {e}")
-            kind = None
-        if kind == "uid_taken":
-            text, markup = duplicate_reply("uid_taken")
-            await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
-            return UID
-
-    context.user_data["uid"] = uid
+async def get_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["size"] = clean(update.message.text)
     context.user_data.pop("editing", None)
     return await show_summary(update, context)
-
-
-async def partner_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'Change Partner' button: form ka link dikhao (state wahi rehti hai, broker baad mein bhi chun sakte hain)."""
-    await update.callback_query.answer()
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=(
-            "🔄 <b>Change Partner</b>\n\n"
-            "Please fill out this form — you'll find all the Change Partner details there:\n"
-            f"{PARTNER_FORM_URL}"
-        ),
-        parse_mode="HTML",
-    )
 
 
 async def support_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -745,14 +662,11 @@ async def edit_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
     field = query.data.split("_")[1]
     context.user_data["editing"] = True
 
-    if field == "broker":
-        await query.edit_message_text("Choose your broker 👇", reply_markup=broker_keyboard())
-        return BROKER
-
     prompts = {
         "name": ("Send your correct <b>full name</b>:", NAME),
-        "email": ("Send your correct <b>email</b>:", EMAIL),
-        "uid": ("Send your correct <b>UID (MT5)</b>:", UID),
+        "email": ("Send your correct <b>Email</b>:", EMAIL),
+        "firm": ("Send your correct <b>Prop Firm</b>:", PROPFIRM),
+        "size": ("Send your correct <b>Account Size</b>:", SIZE),
     }
     text, state = prompts[field]
     await query.edit_message_text(text, parse_mode="HTML")
@@ -772,19 +686,11 @@ async def submit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.username or "N/A",
             d["name"],
             d["email"],
-            d["broker"],
-            d["uid"],
+            d["propfirm"],
+            d["size"],
         )
     except DuplicateError as e:
         text, markup = duplicate_reply(e.kind)
-        if e.kind == "uid_taken":
-            # User UID badal sakta hai: summary wapis dikhao
-            await query.edit_message_text(
-                summary_text(d) + "\n\n" + text,
-                parse_mode="HTML",
-                reply_markup=confirm_keyboard(),
-            )
-            return CONFIRM
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
         d.clear()
         return ConversationHandler.END
@@ -814,8 +720,8 @@ async def submit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{title}\n\n"
         f"👤 Name: {escape(d['name'])}\n"
         f"📧 Email: {escape(d['email'])}\n"
-        f"🏦 Broker: {escape(d['broker'])}\n"
-        f"🆔 UID (MT5): {escape(d['uid'])}\n"
+        f"🏢 Prop Firm: {escape(d['propfirm'])}\n"
+        f"💵 Account Size: {escape(d['size'])}\n"
         f"🔗 Telegram: @{escape(user.username or 'N/A')} (ID: {user.id})\n\n"
         f"Full details are in the Google Sheet. "
         f"Check them, then set Status to Approved, Rejected or Removed.",
@@ -853,18 +759,13 @@ def main():
             ],
             NAME: [MessageHandler(TEXT_ONLY, get_name)],
             EMAIL: [MessageHandler(TEXT_ONLY, get_email)],
-            BROKER: [
-                CallbackQueryHandler(broker_chosen, pattern=r"^broker_\d+$"),
-                CallbackQueryHandler(partner_info, pattern=r"^partner$"),
-                CallbackQueryHandler(support_info, pattern=r"^support$"),
-                MessageHandler(TEXT_ONLY, remind_buttons),
-            ],
-            UID: [MessageHandler(TEXT_ONLY, get_uid)],
+            PROPFIRM: [MessageHandler(TEXT_ONLY, get_propfirm)],
+            SIZE: [MessageHandler(TEXT_ONLY, get_size)],
             CONFIRM: [
                 CallbackQueryHandler(submit, pattern=r"^confirm$"),
                 CallbackQueryHandler(edit_menu, pattern=r"^edit$"),
                 CallbackQueryHandler(back_to_summary, pattern=r"^back$"),
-                CallbackQueryHandler(edit_field, pattern=r"^edit_(name|email|broker|uid)$"),
+                CallbackQueryHandler(edit_field, pattern=r"^edit_(name|email|firm|size)$"),
                 MessageHandler(TEXT_ONLY, remind_buttons),
             ],
         },
