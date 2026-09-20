@@ -2,13 +2,18 @@
 GOLD INSIGHT - PROP FIRM - Verification Bot (Google Sheet dropdown se approval)
 -------------------------------------------------------------------------
 User ka flow:
-1. /start -> Name
-2. Email
-3. Broker select (button): Vantage Broker / FORTRESS FX / XM 360 / ByteFx Broker
+1. /start -> Welcome message + 3 buttons:
+      FUNDED BUY / ALREADY BUY UNDER YOU / CONNECT SUPPORT TEAM
+   - FUNDED BUY            -> funded challenge ka form link dikhata hai
+   - CONNECT SUPPORT TEAM  -> support ki ID dikhata hai
+   - ALREADY BUY UNDER YOU -> verification flow shuru (neeche step 2 se)
+2. Name
+3. Email
+4. Broker select (button): Vantage Broker / FORTRESS FX / XM 360 / ByteFx Broker
    (broker ke buttons ke sath "Change Partner" aur "Contact Support" buttons bhi hain)
-4. UID (MT5)
-5. Bot saari details dikhata hai -> user "Confirm" ya "Edit" dabata hai
-6. Confirm par data Google Sheet mein "Pending" status ke sath save hota hai
+5. UID (MT5)
+6. Bot saari details dikhata hai -> user "Confirm" ya "Edit" dabata hai
+7. Confirm par data Google Sheet mein "Pending" status ke sath save hota hai
 
 Admin ka flow (Sheet ke Status dropdown se):
 - Approved -> user ko private group ka invite link
@@ -63,6 +68,7 @@ CLUB_NAME = "GOLD INSIGHT - PROP FIRM"
 SHEET_NAME = "GOLD INSIGHT DETAILS"           # Google Sheet ka naam (bilkul yehi)
 BROKERS = ["Vantage Broker", "FORTRESS FX", "XM 360", "ByteFx Broker"]
 PARTNER_FORM_URL = "https://forms.gle/NAQJKgG168gpLFbK7"  # "Change Partner" par ye form dikhta hai
+FUNDED_BUY_URL = "https://forms.gle/ujbT4v5mXy4eqGHeA"    # "FUNDED BUY" par ye form dikhta hai
 SUPPORT_USERNAME = "LegitFundedTeam"                      # support ki ID (bina @ ke)
 GOOGLE_CREDENTIALS_FILE = "credentials.json"  # sirf apne computer par test ke liye
 POLL_SECONDS = 30  # bot kitni dair baad sheet check kare
@@ -76,7 +82,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # logs mein bot token na a
 logger = logging.getLogger(__name__)
 
 # Conversation states
-NAME, EMAIL, BROKER, UID, CONFIRM = range(5)
+NAME, EMAIL, BROKER, UID, CONFIRM, WELCOME = range(6)
 TEXT_ONLY = filters.TEXT & ~filters.COMMAND
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -487,6 +493,14 @@ def clean(text):
     return text.strip()[:200]
 
 
+def welcome_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("FUNDED BUY", callback_data="funded_buy")],
+        [InlineKeyboardButton("ALREADY BUY UNDER YOU", callback_data="already_buy")],
+        [InlineKeyboardButton("CONNECT SUPPORT TEAM", callback_data="support")],
+    ])
+
+
 def broker_keyboard():
     buttons = [InlineKeyboardButton(b, callback_data=f"broker_{i}") for i, b in enumerate(BROKERS)]
     return InlineKeyboardMarkup([
@@ -572,12 +586,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     await update.message.reply_text(
-        f"⚡ Welcome to <b>{escape(CLUB_NAME)}</b> ♟️\n\n"
-        "Your next level starts Right Here. 💰\n\n"
-        "💥 Crack The Matrix , Lesssgoooo✨🚀\n\n"
-        "🔓 One final step — verify your broker account below to unlock access.\n\n"
-        "No shortcuts. No noise. Just results.\n\n"
-        "Let's get to work. First, send me your <b>full name</b>:",
+        "⚡️ Welcome to Prop Firm Community ♟\n\n"
+        "🔓 Gold Insight Prop Firm Community — Buy The Funded Challenge Given Below First",
+        reply_markup=welcome_keyboard(),
+    )
+    return WELCOME
+
+
+async def funded_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """'FUNDED BUY' button: form ka link dikhao (user usi menu mein rehta hai)."""
+    await update.callback_query.answer()
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            "💰 <b>Funded Buy</b>\n\n"
+            "Please fill out this form to buy your funded challenge:\n"
+            f"{FUNDED_BUY_URL}"
+        ),
+        parse_mode="HTML",
+    )
+
+
+async def already_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """'ALREADY BUY UNDER YOU' button: verification flow shuru karo (Name se)."""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_reply_markup(reply_markup=None)  # buttons hata do
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            "🔓 One final step — verify your broker account below to unlock access.\n\n"
+            "First, send me your <b>full name</b>:"
+        ),
         parse_mode="HTML",
     )
     return NAME
@@ -805,6 +845,12 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
+            WELCOME: [
+                CallbackQueryHandler(funded_buy, pattern=r"^funded_buy$"),
+                CallbackQueryHandler(already_buy, pattern=r"^already_buy$"),
+                CallbackQueryHandler(support_info, pattern=r"^support$"),
+                MessageHandler(TEXT_ONLY, remind_buttons),
+            ],
             NAME: [MessageHandler(TEXT_ONLY, get_name)],
             EMAIL: [MessageHandler(TEXT_ONLY, get_email)],
             BROKER: [
