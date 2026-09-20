@@ -57,7 +57,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
 # --- @LegitFunded_Bot ki settings (seedha code mein) ---
 # Jin accounts ko notification jaye (ek ya zyada Telegram ID, comma se alag).
 # Har admin ko bot ko ek dafa Start karna zaroori hai.
-ADMIN_CHAT_IDS = [7331621975, 7084462670]  # @LegitFundedTeam aur owner
+ADMIN_CHAT_IDS = [7331621975]  # @LegitFundedTeam aur owner
 # In accounts par duplicate wale rules lagu nahi hote (taake aap baar baar test kar sakein).
 # Sab par rules lagane ke liye ise khali kar dein:  SKIP_DUPLICATE_CHECK_FOR = []
 SKIP_DUPLICATE_CHECK_FOR = ADMIN_CHAT_IDS
