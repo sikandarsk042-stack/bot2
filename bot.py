@@ -603,7 +603,7 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["email"] = email
     if context.user_data.pop("editing", False):
         return await show_summary(update, context)
-    await update.message.reply_text("Which <b>Prop Firm</b> Should You Buy ?", parse_mode="HTML")
+    await update.message.reply_text("Which Company Funded Account Did You purchase ?")
     return PROPFIRM
 
 
@@ -629,7 +629,8 @@ async def support_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=(
             "💬 <b>Contact Support</b>\n\n"
             "Have a question or need a hand? Our team is happy to help you 😊\n\n"
-            f"Message us here: @{SUPPORT_USERNAME}"
+            "Contact our support team here:\n"
+            f"👉 @{SUPPORT_USERNAME}"
         ),
         parse_mode="HTML",
         reply_markup=support_markup(),
