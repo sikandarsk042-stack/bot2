@@ -1,5 +1,5 @@
 """
-Legit Traders Club - Verification Bot (Google Sheet dropdown se approval)
+GOLD INSIGHT - PROP FIRM - Verification Bot (Google Sheet dropdown se approval)
 -------------------------------------------------------------------------
 User ka flow:
 1. /start -> Name
@@ -51,19 +51,19 @@ from telegram.ext import (
 # ======== YAHAN APNI DETAILS DAALO ========
 # Token ko environment variable (Railway Variables) se lo.
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
-# --- @LegitClub_bot ki settings (seedha code mein) ---
+# --- @LegitFunded_Bot ki settings (seedha code mein) ---
 # Jin accounts ko notification jaye (ek ya zyada Telegram ID, comma se alag).
 # Har admin ko bot ko ek dafa Start karna zaroori hai.
-ADMIN_CHAT_IDS = [7084462670]
+ADMIN_CHAT_IDS = [7331621975, 7084462670]  # @LegitFundedTeam aur owner
 # In accounts par duplicate wale rules lagu nahi hote (taake aap baar baar test kar sakein).
 # Sab par rules lagane ke liye ise khali kar dein:  SKIP_DUPLICATE_CHECK_FOR = []
 SKIP_DUPLICATE_CHECK_FOR = ADMIN_CHAT_IDS
-PRIVATE_GROUP_CHAT_ID = -1003535465486        # Legit Traders Club 👑 (channel)
-CLUB_NAME = "Legit Traders Club 👑"
-SHEET_NAME = "LEGIT CLUB DETAILS"             # Google Sheet ka naam (bilkul yehi)
+PRIVATE_GROUP_CHAT_ID = -1004372780406        # GOLD INSIGHT - PROP FIRM (channel)
+CLUB_NAME = "GOLD INSIGHT - PROP FIRM"
+SHEET_NAME = "GOLD INSIGHT DETAILS"           # Google Sheet ka naam (bilkul yehi)
 BROKERS = ["Vantage Broker", "FORTRESS FX", "XM 360", "ByteFx Broker"]
 PARTNER_FORM_URL = "https://forms.gle/NAQJKgG168gpLFbK7"  # "Change Partner" par ye form dikhta hai
-SUPPORT_USERNAME = "LegitTraderTeam"                      # support ki ID (bina @ ke)
+SUPPORT_USERNAME = "LegitFundedTeam"                      # support ki ID (bina @ ke)
 GOOGLE_CREDENTIALS_FILE = "credentials.json"  # sirf apne computer par test ke liye
 POLL_SECONDS = 30  # bot kitni dair baad sheet check kare
 # ===========================================
@@ -572,7 +572,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     await update.message.reply_text(
-        "⚡ Welcome to <b>Legit Traders</b> ♟️\n\n"
+        f"⚡ Welcome to <b>{escape(CLUB_NAME)}</b> ♟️\n\n"
         "Your next level starts Right Here. 💰\n\n"
         "💥 Crack The Matrix , Lesssgoooo✨🚀\n\n"
         "🔓 One final step — verify your broker account below to unlock access.\n\n"
