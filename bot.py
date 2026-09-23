@@ -91,10 +91,10 @@ def support_markup():
 
 
 REJECTED_TEXT = (
-    "⚠️ <b>We couldn't verify your details</b>\n\n"
-    "It looks like something in the information you submitted isn't correct "
-    "(for example, your email or prop firm details), so we weren't able to verify it.\n\n"
-    "Please contact our support team — they'll help you sort it out quickly 🤝\n"
+    "⚠️ <b>Verification Failed</b>\n\n"
+    "It seems you haven't purchased the funded account using our code. "
+    "To get entry into Gold Insight, please purchase the account using the Legit code.\n\n"
+    "Need help? Contact our support team:\n"
     f"👉 @{SUPPORT_USERNAME}\n\n"
     "You can also send /start to submit your details again."
 )
