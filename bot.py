@@ -2,17 +2,17 @@
 GOLD INSIGHT - PROP FIRM - Verification Bot (Google Sheet dropdown se approval)
 -------------------------------------------------------------------------
 User ka flow:
-1. /start -> Welcome message + 3 buttons:
-      FUNDED BUY / ALREADY BUY UNDER YOU / CONNECT SUPPORT TEAM
-   - FUNDED BUY            -> funded challenge ka form link dikhata hai
-   - CONNECT SUPPORT TEAM  -> support ki ID dikhata hai
-   - ALREADY BUY UNDER YOU -> verification flow shuru (neeche step 2 se)
+1. /start -> Welcome message + 5 buttons:
+      LEGION FUNDED / PIPSTONE CAPITAL / SHARK FUNDED / BLUE GUARDIAN / CONNECT SUPPORT TEAM
+   - Prop firm button dabane par 2 buttons aate hain (upar firm ka caption):
+        NEW BUY FUNDED ACCOUNT -> us firm ka funded challenge link
+        ALREADY BUY UNDER YOU  -> verification flow shuru (neeche step 2 se)
+   - CONNECT SUPPORT TEAM -> support ki ID dikhata hai
 2. Name
 3. Email (propfirm account wali)
-4. Prop Firm
-5. Account Size
-6. Bot saari details dikhata hai -> user "Confirm" ya "Edit" dabata hai
-7. Confirm par data Google Sheet mein "Pending" status ke sath save hota hai
+4. Account Size   (Prop Firm pehle hi button se select ho chuki hoti hai)
+5. Bot saari details dikhata hai -> user "Confirm" ya "Edit" dabata hai
+6. Confirm par data Google Sheet mein "Pending" status ke sath save hota hai
 
 Admin ka flow (Sheet ke Status dropdown se):
 - Approved -> user ko private group ka invite link
@@ -64,10 +64,19 @@ SKIP_DUPLICATE_CHECK_FOR = ADMIN_CHAT_IDS
 PRIVATE_GROUP_CHAT_ID = -1004372780406        # GOLD INSIGHT - PROP FIRM (channel)
 CLUB_NAME = "GOLD INSIGHT - PROP FIRM"
 SHEET_NAME = "GOLD INSIGHT DETAILS"           # Google Sheet ka naam (bilkul yehi)
-FUNDED_BUY_URL = "https://forms.gle/ujbT4v5mXy4eqGHeA"    # "FUNDED BUY" par ye form dikhta hai
 SUPPORT_USERNAME = "LegitFundedTeam"                      # support ki ID (bina @ ke)
 GOOGLE_CREDENTIALS_FILE = "credentials.json"  # sirf apne computer par test ke liye
 POLL_SECONDS = 30  # bot kitni dair baad sheet check kare
+
+# Prop firms: key -> (button par jo naam dikhe, "NEW BUY FUNDED ACCOUNT" ka link)
+# ⚠️ Har firm ka apna link yahan daalo (abhi sab par purana form link laga hua hai)
+_DEFAULT_FUNDED_URL = "https://forms.gle/ujbT4v5mXy4eqGHeA"
+FIRMS = {
+    "legion":   ("LEGION FUNDED",   _DEFAULT_FUNDED_URL),
+    "pipstone": ("PIPSTONE CAPITAL", _DEFAULT_FUNDED_URL),
+    "shark":    ("SHARK FUNDED",    _DEFAULT_FUNDED_URL),
+    "blue":     ("BLUE GUARDIAN",   _DEFAULT_FUNDED_URL),
+}
 # ===========================================
 
 logging.basicConfig(
@@ -81,6 +90,11 @@ logger = logging.getLogger(__name__)
 NAME, EMAIL, PROPFIRM, SIZE, CONFIRM, WELCOME = range(6)
 TEXT_ONLY = filters.TEXT & ~filters.COMMAND
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+WELCOME_TEXT = (
+    "⚡️ Welcome to Prop Firm Community ♟\n\n"
+    "🔓 Gold Insight Prop Firm Community — Select Your Prop Firm Below"
+)
 
 
 # ---------------- User ko jane wale messages ----------------
@@ -468,10 +482,21 @@ def clean(text):
 
 
 def welcome_keyboard():
+    """Pehli screen: 4 prop firms + support."""
+    rows = [
+        [InlineKeyboardButton(label, callback_data=f"firm_{key}")]
+        for key, (label, _url) in FIRMS.items()
+    ]
+    rows.append([InlineKeyboardButton("CONTACT SUPPORT TEAM", callback_data="support")])
+    return InlineKeyboardMarkup(rows)
+
+
+def firm_keyboard():
+    """Firm select karne ke baad wali screen: 2 buttons + back."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("FUNDED BUY", callback_data="funded_buy")],
-        [InlineKeyboardButton("ALREADY BUY UNDER YOU", callback_data="already_buy")],
-        [InlineKeyboardButton("CONNECT SUPPORT TEAM", callback_data="support")],
+        [InlineKeyboardButton("New Buy Funded Account", callback_data="new_buy")],
+        [InlineKeyboardButton("Already Buy Under You", callback_data="already_buy")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="back_firms")],
     ])
 
 
@@ -544,35 +569,68 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if kind == "resubmit":
         await update.message.reply_text(
             "🔁 Your previous submission couldn't be verified. Let's fix it — "
-            "please enter your details again below."
+            "please select your prop firm and enter your details again below."
         )
 
-    await update.message.reply_text(
-        "⚡️ Welcome to Prop Firm Community ♟\n\n"
-        "🔓 Gold Insight Prop Firm Community — Buy The Funded Challenge Given Below First",
-        reply_markup=welcome_keyboard(),
+    await update.message.reply_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+    return WELCOME
+
+
+async def pick_firm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Prop firm button: firm save karo aur 2 buttons (New Buy / Already Buy) dikhao."""
+    query = update.callback_query
+    await query.answer()
+    key = query.data.split("_", 1)[1]
+    label, _url = FIRMS[key]
+    context.user_data["firm_key"] = key
+    context.user_data["propfirm"] = label
+    await query.edit_message_text(
+        f"🏢 <b>{escape(label)}</b>\n\nPlease choose an option below 👇",
+        parse_mode="HTML",
+        reply_markup=firm_keyboard(),
     )
     return WELCOME
 
 
+async def back_to_firms(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Back button: dobara prop firms wali screen."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("firm_key", None)
+    context.user_data.pop("propfirm", None)
+    await query.edit_message_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+    return WELCOME
+
+
 async def funded_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'FUNDED BUY' button: form ka link dikhao (user usi menu mein rehta hai)."""
-    await update.callback_query.answer()
+    """'New Buy Funded Account' button: selected firm ka link dikhao."""
+    query = update.callback_query
+    await query.answer()
+    key = context.user_data.get("firm_key")
+    if key not in FIRMS:
+        await query.edit_message_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+        return WELCOME
+    label, url = FIRMS[key]
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=(
-            "💰 <b>Funded Buy</b>\n\n"
+            f"💰 <b>New Buy — {escape(label)}</b>\n\n"
             "Please fill out this form to buy your funded challenge:\n"
-            f"{FUNDED_BUY_URL}"
+            f"{url}"
         ),
         parse_mode="HTML",
     )
+    return WELCOME
 
 
 async def already_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'ALREADY BUY UNDER YOU' button: verification flow shuru karo (Name se)."""
+    """'Already Buy Under You' button: verification flow shuru karo (Name se)."""
     query = update.callback_query
     await query.answer()
+    if context.user_data.get("propfirm") not in [v[0] for v in FIRMS.values()]:
+        # Firm select nahi hui (e.g. purana message) -> pehli screen par wapas
+        await query.edit_message_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+        return WELCOME
     await query.edit_message_reply_markup(reply_markup=None)  # buttons hata do
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -603,11 +661,13 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["email"] = email
     if context.user_data.pop("editing", False):
         return await show_summary(update, context)
-    await update.message.reply_text("Which Company Funded Account Did You purchase ?")
-    return PROPFIRM
+    # Prop Firm pehle hi button se select ho chuki hai -> seedha Account Size
+    await update.message.reply_text("<b>Account Size</b> :-", parse_mode="HTML")
+    return SIZE
 
 
 async def get_propfirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sirf Edit ke waqt use hota hai (normal flow mein firm button se aati hai)."""
     context.user_data["propfirm"] = clean(update.message.text)
     if context.user_data.pop("editing", False):
         return await show_summary(update, context)
@@ -753,8 +813,10 @@ def main():
         entry_points=[CommandHandler("start", start)],
         states={
             WELCOME: [
-                CallbackQueryHandler(funded_buy, pattern=r"^funded_buy$"),
+                CallbackQueryHandler(pick_firm, pattern=r"^firm_(legion|pipstone|shark|blue)$"),
+                CallbackQueryHandler(funded_buy, pattern=r"^new_buy$"),
                 CallbackQueryHandler(already_buy, pattern=r"^already_buy$"),
+                CallbackQueryHandler(back_to_firms, pattern=r"^back_firms$"),
                 CallbackQueryHandler(support_info, pattern=r"^support$"),
                 MessageHandler(TEXT_ONLY, remind_buttons),
             ],
