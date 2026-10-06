@@ -6,7 +6,7 @@ User ka flow:
       LEGION FUNDED / PIPSTONE CAPITAL / SHARK FUNDED / BLUE GUARDIAN / CONNECT SUPPORT TEAM
    - Prop firm button dabane par 2 buttons aate hain (upar firm ka caption):
         NEW BUY FUNDED ACCOUNT -> us firm ka funded challenge link
-        ALREADY BUY UNDER YOU  -> verification flow shuru (neeche step 2 se)
+        ALREADY BUY UNDER LEGIT -> verification flow shuru (neeche step 2 se)
    - CONNECT SUPPORT TEAM -> support ki ID dikhata hai
 2. Name
 3. Email (propfirm account wali)
@@ -103,6 +103,8 @@ FIRMS = {
     "shark":    ("SHARK FUNDED",     SHARK_TEXT),
     "blue":     ("BLUE GUARDIAN",    BLUE_TEXT),
 }
+# Jin firms par abhi "COMING SOON" hai, un par "Already Buy Under Legit" button nahi dikhega
+COMING_SOON = {"shark", "blue"}
 # ===========================================
 
 logging.basicConfig(
@@ -517,13 +519,13 @@ def welcome_keyboard():
     return InlineKeyboardMarkup(rows)
 
 
-def firm_keyboard():
-    """Firm select karne ke baad wali screen: 2 buttons + back."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("New Buy Funded Account", callback_data="new_buy")],
-        [InlineKeyboardButton("Already Buy Under You", callback_data="already_buy")],
-        [InlineKeyboardButton("⬅️ Back", callback_data="back_firms")],
-    ])
+def firm_keyboard(key):
+    """Firm select karne ke baad wali screen: New Buy (+ Already Buy, agar firm live hai) + back."""
+    rows = [[InlineKeyboardButton("New Buy Funded Account", callback_data="new_buy")]]
+    if key not in COMING_SOON:
+        rows.append([InlineKeyboardButton("Already Buy Under Legit", callback_data="already_buy")])
+    rows.append([InlineKeyboardButton("⬅️ Back", callback_data="back_firms")])
+    return InlineKeyboardMarkup(rows)
 
 
 def confirm_keyboard():
@@ -613,7 +615,7 @@ async def pick_firm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"🏢 <b>{escape(label)}</b>\n\nPlease choose an option below 👇",
         parse_mode="HTML",
-        reply_markup=firm_keyboard(),
+        reply_markup=firm_keyboard(key),
     )
     return WELCOME
 
@@ -646,8 +648,11 @@ async def funded_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def already_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'Already Buy Under You' button: verification flow shuru karo (Name se)."""
+    """'Already Buy Under Legit' button: verification flow shuru karo (Name se)."""
     query = update.callback_query
+    if context.user_data.get("firm_key") in COMING_SOON:
+        await query.answer("COMING SOON", show_alert=True)
+        return WELCOME
     await query.answer()
     if context.user_data.get("propfirm") not in [v[0] for v in FIRMS.values()]:
         # Firm select nahi hui (e.g. purana message) -> pehli screen par wapas
