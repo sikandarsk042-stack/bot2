@@ -113,6 +113,7 @@ LOGO_FILES = {
     "pipstone": "pipstone.png",
     "shark": "shark.png",
     "blue": "blue.png",
+    "welcome": "welcome.png",  # pehli screen ka banner (4 logos ka collage)
 }
 # ===========================================
 
@@ -609,7 +610,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "please select your prop firm and enter your details again below."
         )
 
-    await update.message.reply_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+    await send_firm_photo(context, update.effective_chat.id, "welcome", WELCOME_TEXT, welcome_keyboard())
     return WELCOME
 
 
@@ -620,7 +621,7 @@ async def show_welcome(query, context: ContextTypes.DEFAULT_TYPE):
         await query.message.delete()
     except Exception:
         pass
-    await context.bot.send_message(chat_id=chat_id, text=WELCOME_TEXT, reply_markup=welcome_keyboard())
+    await send_firm_photo(context, chat_id, "welcome", WELCOME_TEXT, welcome_keyboard())
 
 
 async def send_firm_photo(context: ContextTypes.DEFAULT_TYPE, chat_id, key, caption, markup):
