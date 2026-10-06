@@ -68,14 +68,40 @@ SUPPORT_USERNAME = "LegitFundedTeam"                      # support ki ID (bina 
 GOOGLE_CREDENTIALS_FILE = "credentials.json"  # sirf apne computer par test ke liye
 POLL_SECONDS = 30  # bot kitni dair baad sheet check kare
 
-# Prop firms: key -> (button par jo naam dikhe, "NEW BUY FUNDED ACCOUNT" ka link)
-# ⚠️ Har firm ka apna link yahan daalo (abhi sab par purana form link laga hua hai)
-_DEFAULT_FUNDED_URL = "https://forms.gle/ujbT4v5mXy4eqGHeA"
+# Prop firms: key -> (button par jo naam dikhe, "New Buy Funded Account" par dikhne wala message)
+# Message HTML format mein hai: <b>bold</b>, <a href="link">text</a>
+LEGION_TEXT = (
+    "<b>1. LEGION FUNDED</b>\n\n"
+    "LINK :- https://checkout.legionfunding.com/ref/991/\n\n"
+    "USE PROMO CODE 5% DISCOUNT :- "
+    '<a href="https://checkout.legionfunding.com/ref/991/">LEGIT</a>\n\n'
+    "NOTE:- "
+    '<a href="https://checkout.legionfunding.com/ref/991/">'
+    "MANDOTRY TO USE THIS CODE BEACAUSE LINK KABHI KABHI LINK WORK NHI KRTI "
+    "\"WITHOUT CODE WE ACCESS INSIDE THE GOLD INSIGHT - PROP FIRM COMMUNITY\"</a>"
+)
+
+PIPSTONE_TEXT = (
+    "<b>PIPSTONE CAPITAL</b>\n\n"
+    "📈PIPSTONE :- https://pipstonecapital.com//?affId=bEQa6AgEnm\n\n"
+    "USE PROMO CODE :- (MANDOTRY TO USE THIS CODE)\n"
+    '1) BUY 1 GET 1 FREE ACCOUNT :- <a href="https://pipstonecapital.com//?affId=bEQa6AgEnm">LEGITBOGO</a>\n'
+    '2) 35% DISCOUNT EVERY PURCHASE :- <a href="https://pipstonecapital.com//?affId=bEQa6AgEnm">LEGIT</a>\n\n'
+    "NOTE:- MANDOTRY TO USE THIS CODE BEACAUSE LINK KABHI KABHI LINK WORK NHI KRTI\n\n"
+    'Use :- <a href="https://pipstonecapital.com//?affId=bEQa6AgEnm">LEGITBOGO</a>\n'
+    "( •BUY ONE GET ONE FREE )\n"
+    "( • BUY 25K FUNDED ACCOUNT + 1 FREE 25k FUNDED ACCOUNT AND AND AND ALSO ADD "
+    "5K INSTANT FUNDED FREE FORM MY SIDE )"
+)
+
+SHARK_TEXT = "<b>SHARK FUNDED</b>\n\nComing Soon"
+BLUE_TEXT = "<b>BLUE GUARDIAN</b>\n\nComing Soon"
+
 FIRMS = {
-    "legion":   ("LEGION FUNDED",   _DEFAULT_FUNDED_URL),
-    "pipstone": ("PIPSTONE CAPITAL", _DEFAULT_FUNDED_URL),
-    "shark":    ("SHARK FUNDED",    _DEFAULT_FUNDED_URL),
-    "blue":     ("BLUE GUARDIAN",   _DEFAULT_FUNDED_URL),
+    "legion":   ("LEGION FUNDED",    LEGION_TEXT),
+    "pipstone": ("PIPSTONE CAPITAL", PIPSTONE_TEXT),
+    "shark":    ("SHARK FUNDED",     SHARK_TEXT),
+    "blue":     ("BLUE GUARDIAN",    BLUE_TEXT),
 }
 # ===========================================
 
@@ -485,7 +511,7 @@ def welcome_keyboard():
     """Pehli screen: 4 prop firms + support."""
     rows = [
         [InlineKeyboardButton(label, callback_data=f"firm_{key}")]
-        for key, (label, _url) in FIRMS.items()
+        for key, (label, _text) in FIRMS.items()
     ]
     rows.append([InlineKeyboardButton("CONTACT SUPPORT TEAM", callback_data="support")])
     return InlineKeyboardMarkup(rows)
@@ -581,7 +607,7 @@ async def pick_firm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     key = query.data.split("_", 1)[1]
-    label, _url = FIRMS[key]
+    label, _text = FIRMS[key]
     context.user_data["firm_key"] = key
     context.user_data["propfirm"] = label
     await query.edit_message_text(
@@ -603,21 +629,17 @@ async def back_to_firms(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def funded_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'New Buy Funded Account' button: selected firm ka link dikhao."""
+    """'New Buy Funded Account' button: selected firm ka message/link dikhao."""
     query = update.callback_query
     await query.answer()
     key = context.user_data.get("firm_key")
     if key not in FIRMS:
         await query.edit_message_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
         return WELCOME
-    label, url = FIRMS[key]
+    _label, text = FIRMS[key]
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=(
-            f"💰 <b>New Buy — {escape(label)}</b>\n\n"
-            "Please fill out this form to buy your funded challenge:\n"
-            f"{url}"
-        ),
+        text=text,
         parse_mode="HTML",
     )
     return WELCOME
