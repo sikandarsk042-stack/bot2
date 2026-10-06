@@ -541,7 +541,7 @@ def firm_keyboard(key):
     """Firm select karne ke baad wali screen: New Buy (+ Already Buy, agar firm live hai) + back."""
     rows = [[InlineKeyboardButton("New Buy Funded Account", callback_data="new_buy")]]
     if key not in COMING_SOON:
-        rows.append([InlineKeyboardButton("Already Buy Under Legit", callback_data="already_buy")])
+        rows.append([InlineKeyboardButton("Already Purchased (Legit)", callback_data="already_buy")])
     rows.append([InlineKeyboardButton("⬅️ Back", callback_data="back_firms")])
     return InlineKeyboardMarkup(rows)
 
