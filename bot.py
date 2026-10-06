@@ -105,6 +105,15 @@ FIRMS = {
 }
 # Jin firms par abhi "COMING SOON" hai, un par "Already Buy Under Legit" button nahi dikhega
 COMING_SOON = {"shark", "blue"}
+
+# Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, shark.png, blue.png)
+LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logos")
+LOGO_FILES = {
+    "legion": "legion.png",
+    "pipstone": "pipstone.png",
+    "shark": "shark.png",
+    "blue": "blue.png",
+}
 # ===========================================
 
 logging.basicConfig(
@@ -604,19 +613,58 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WELCOME
 
 
+async def show_welcome(query, context: ContextTypes.DEFAULT_TYPE):
+    """Pehli screen dobara dikhao (photo wale message ko hata kar naya text message bhejo)."""
+    chat_id = query.message.chat_id
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(chat_id=chat_id, text=WELCOME_TEXT, reply_markup=welcome_keyboard())
+
+
+async def send_firm_photo(context: ContextTypes.DEFAULT_TYPE, chat_id, key, caption, markup):
+    """Firm ka logo caption + buttons ke sath bhejo. Logo na mile to sirf text bhej deta hai."""
+    cache = context.application.bot_data.setdefault("logo_ids", {})  # file_id cache: dobara upload nahi hota
+    try:
+        if cache.get(key):
+            await context.bot.send_photo(
+                chat_id=chat_id, photo=cache[key], caption=caption,
+                parse_mode="HTML", reply_markup=markup,
+            )
+        else:
+            with open(os.path.join(LOGO_DIR, LOGO_FILES[key]), "rb") as f:
+                msg = await context.bot.send_photo(
+                    chat_id=chat_id, photo=f, caption=caption,
+                    parse_mode="HTML", reply_markup=markup,
+                )
+            cache[key] = msg.photo[-1].file_id
+    except Exception as e:
+        logger.error(f"Logo bhejne mein masla ({key}): {type(e).__name__}: {e}")
+        await context.bot.send_message(
+            chat_id=chat_id, text=caption, parse_mode="HTML", reply_markup=markup
+        )
+
+
 async def pick_firm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Prop firm button: firm save karo aur 2 buttons (New Buy / Already Buy) dikhao."""
+    """Prop firm button: firm save karo aur logo + 2 buttons (New Buy / Already Buy) dikhao."""
     query = update.callback_query
     await query.answer()
     key = query.data.split("_", 1)[1]
     label, _text = FIRMS[key]
     context.user_data["firm_key"] = key
     context.user_data["propfirm"] = label
-    await query.edit_message_text(
+    await send_firm_photo(
+        context,
+        query.message.chat_id,
+        key,
         f"🏢 <b>{escape(label)}</b>\n\nPlease choose an option below 👇",
-        parse_mode="HTML",
-        reply_markup=firm_keyboard(key),
+        firm_keyboard(key),
     )
+    try:
+        await query.message.delete()  # purana text menu hata do
+    except Exception:
+        pass
     return WELCOME
 
 
@@ -626,7 +674,7 @@ async def back_to_firms(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     context.user_data.pop("firm_key", None)
     context.user_data.pop("propfirm", None)
-    await query.edit_message_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+    await show_welcome(query, context)
     return WELCOME
 
 
@@ -636,7 +684,7 @@ async def funded_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     key = context.user_data.get("firm_key")
     if key not in FIRMS:
-        await query.edit_message_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+        await show_welcome(query, context)
         return WELCOME
     _label, text = FIRMS[key]
     await context.bot.send_message(
@@ -656,7 +704,7 @@ async def already_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if context.user_data.get("propfirm") not in [v[0] for v in FIRMS.values()]:
         # Firm select nahi hui (e.g. purana message) -> pehli screen par wapas
-        await query.edit_message_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
+        await show_welcome(query, context)
         return WELCOME
     await query.edit_message_reply_markup(reply_markup=None)  # buttons hata do
     await context.bot.send_message(
