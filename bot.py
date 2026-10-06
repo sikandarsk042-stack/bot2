@@ -106,6 +106,14 @@ FIRMS = {
 # Jin firms par abhi "COMING SOON" hai, un par "Already Buy Under Legit" button nahi dikhega
 COMING_SOON = {"shark", "blue"}
 
+# Buttons ke text ke sath chhota icon (Telegram buttons mein asli image nahi lag sakti, emoji lag sakta hai)
+FIRM_EMOJI = {
+    "legion": "🔷",
+    "pipstone": "⛰️",
+    "shark": "🦈",
+    "blue": "🛡️",
+}
+
 # Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, shark.png, blue.png)
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logos")
 LOGO_FILES = {
@@ -522,10 +530,10 @@ def clean(text):
 def welcome_keyboard():
     """Pehli screen: 4 prop firms + support."""
     rows = [
-        [InlineKeyboardButton(label, callback_data=f"firm_{key}")]
+        [InlineKeyboardButton(f"{FIRM_EMOJI.get(key, '')} {label}".strip(), callback_data=f"firm_{key}")]
         for key, (label, _text) in FIRMS.items()
     ]
-    rows.append([InlineKeyboardButton("CONTACT SUPPORT TEAM", callback_data="support")])
+    rows.append([InlineKeyboardButton("💬 CONTACT SUPPORT TEAM", callback_data="support")])
     return InlineKeyboardMarkup(rows)
 
 
