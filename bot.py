@@ -94,7 +94,12 @@ PIPSTONE_TEXT = (
     "5K INSTANT FUNDED FREE FORM MY SIDE )"
 )
 
-SHARK_TEXT = "<b>SHARK FUNDED</b>\n\nCOMING SOON"
+SHARK_TEXT = (
+    "<b>SHARK EXCHANGE</b>\n\n"
+    "NEW ACCOUNT OPEN :- https://sharkapp.app.link/oMaGSj6r56b\n\n"
+    "My Referral Code :- <b>LEGIT</b>"
+)
+
 BLUE_TEXT = "<b>BLUE GUARDIAN</b>\n\nCOMING SOON"
 
 FIRMS = {
@@ -104,7 +109,7 @@ FIRMS = {
     "blue":     ("BLUE GUARDIAN",    BLUE_TEXT),
 }
 # Jin firms par abhi "COMING SOON" hai, un par "Already Buy Under Legit" button nahi dikhega
-COMING_SOON = {"shark", "blue"}
+COMING_SOON = {"blue"}
 
 # Buttons ke text ke sath chhota icon (Telegram buttons mein asli image nahi lag sakti, emoji lag sakta hai)
 FIRM_EMOJI = {
