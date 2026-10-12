@@ -96,8 +96,8 @@ PIPSTONE_TEXT = (
 
 SHARK_TEXT = (
     "<b>SHARK EXCHANGE</b>\n\n"
-    "NEW ACCOUNT OPEN :- https://sharkapp.app.link/oMaGSj6r56b\n\n"
-    "My Referral Code :- <b>LEGIT</b>"
+    "NEW ACCOUNT OPEN :- https://app.sharkfunded.com/signup?ref=dccd1e1b\n\n"
+    "My Referral Code :- <b>40% OFF USE THIS CODE :- LEGIT</b>"
 )
 
 BLUE_TEXT = "<b>BLUE GUARDIAN</b>\n\nCOMING SOON"
