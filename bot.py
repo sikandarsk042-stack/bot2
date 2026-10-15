@@ -2,12 +2,12 @@
 GOLD INSIGHT - PROP FIRM - Verification Bot (Google Sheet dropdown se approval)
 -------------------------------------------------------------------------
 User ka flow:
-1. /start -> Welcome message + 5 buttons:
-      LEGION FUNDED / PIPSTONE CAPITAL / SHARK FUNDED / BLUE GUARDIAN / CONNECT SUPPORT TEAM
+1. /start -> Welcome message + 4 buttons:
+      LEGION FUNDED / PIPSTONE CAPITAL / BLUE GUARDIAN / CONTACT SUPPORT TEAM
    - Prop firm button dabane par 2 buttons aate hain (upar firm ka caption):
-        NEW BUY FUNDED ACCOUNT -> us firm ka funded challenge link
-        ALREADY BUY UNDER LEGIT -> verification flow shuru (neeche step 2 se)
-   - CONNECT SUPPORT TEAM -> support ki ID dikhata hai
+        New Buy Funded Account -> us firm ka funded challenge link
+        Already Purchased (Legit) -> verification flow shuru (neeche step 2 se)
+   - CONTACT SUPPORT TEAM -> support ki ID dikhata hai
 2. Name
 3. Email (propfirm account wali)
 4. Account Size   (Prop Firm pehle hi button se select ho chuki hoti hai)
@@ -94,18 +94,11 @@ PIPSTONE_TEXT = (
     "5K INSTANT FUNDED FREE FORM MY SIDE )"
 )
 
-SHARK_TEXT = (
-    "<b>SHARK FUNDED</b>\n\n"
-    "NEW ACCOUNT OPEN :- https://app.sharkfunded.com/signup?ref=dccd1e1b\n\n"
-    "My Referral Code :- <b>40% OFF USE THIS CODE :- LEGIT</b>"
-)
-
 BLUE_TEXT = "<b>BLUE GUARDIAN</b>\n\nCOMING SOON"
 
 FIRMS = {
     "legion":   ("LEGION FUNDED",    LEGION_TEXT),
     "pipstone": ("PIPSTONE CAPITAL", PIPSTONE_TEXT),
-    "shark":    ("SHARK FUNDED",     SHARK_TEXT),
     "blue":     ("BLUE GUARDIAN",    BLUE_TEXT),
 }
 # Jin firms par abhi "COMING SOON" hai, un par "Already Buy Under Legit" button nahi dikhega
@@ -115,18 +108,16 @@ COMING_SOON = {"blue"}
 FIRM_EMOJI = {
     "legion": "🔷",
     "pipstone": "⛰️",
-    "shark": "🦈",
     "blue": "🛡️",
 }
 
-# Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, shark.png, blue.png)
+# Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, blue.png, welcome.png)
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logos")
 LOGO_FILES = {
     "legion": "legion.png",
     "pipstone": "pipstone.png",
-    "shark": "shark.png",
     "blue": "blue.png",
-    "welcome": "welcome.png",  # pehli screen ka banner (4 logos ka collage)
+    "welcome": "welcome.png",  # pehli screen ka banner (logos ka collage)
 }
 # ===========================================
 
@@ -533,7 +524,7 @@ def clean(text):
 
 
 def welcome_keyboard():
-    """Pehli screen: 4 prop firms + support."""
+    """Pehli screen: prop firms + support."""
     rows = [
         [InlineKeyboardButton(f"{FIRM_EMOJI.get(key, '')} {label}".strip(), callback_data=f"firm_{key}")]
         for key, (label, _text) in FIRMS.items()
@@ -710,7 +701,7 @@ async def funded_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def already_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'Already Buy Under Legit' button: verification flow shuru karo (Name se)."""
+    """'Already Purchased (Legit)' button: verification flow shuru karo (Name se)."""
     query = update.callback_query
     if context.user_data.get("firm_key") in COMING_SOON:
         await query.answer("COMING SOON", show_alert=True)
@@ -902,7 +893,7 @@ def main():
         entry_points=[CommandHandler("start", start)],
         states={
             WELCOME: [
-                CallbackQueryHandler(pick_firm, pattern=r"^firm_(legion|pipstone|shark|blue)$"),
+                CallbackQueryHandler(pick_firm, pattern=r"^firm_(legion|pipstone|blue)$"),
                 CallbackQueryHandler(funded_buy, pattern=r"^new_buy$"),
                 CallbackQueryHandler(already_buy, pattern=r"^already_buy$"),
                 CallbackQueryHandler(back_to_firms, pattern=r"^back_firms$"),
