@@ -3,7 +3,7 @@ GOLD INSIGHT - PROP FIRM - Verification Bot (Google Sheet dropdown se approval)
 -------------------------------------------------------------------------
 User ka flow:
 1. /start -> Welcome message + 4 buttons:
-      LEGION FUNDED / PIPSTONE CAPITAL / BLUE GUARDIAN / CONTACT SUPPORT TEAM
+      LEGION FUNDED / PIPSTONE CAPITAL / SHARK FUNDED / CONTACT SUPPORT TEAM
    - Prop firm button dabane par 2 buttons aate hain (upar firm ka caption):
         New Buy Funded Account -> us firm ka funded challenge link
         Already Purchased (Legit) -> verification flow shuru (neeche step 2 se)
@@ -94,29 +94,35 @@ PIPSTONE_TEXT = (
     "5K INSTANT FUNDED FREE FORM MY SIDE )"
 )
 
-BLUE_TEXT = "<b>BLUE GUARDIAN</b>\n\nCOMING SOON"
+SHARK_TEXT = (
+    "<b>SHARK FUNDED</b>\n\n"
+    "🦈 LINK :- https://app.sharkfunded.com/signup?ref=dccd1e1b\n\n"
+    "40% OFF USE THIS CODE :- "
+    '<a href="https://app.sharkfunded.com/signup?ref=dccd1e1b">LEGIT</a>\n\n'
+    "NOTE:- MANDATORY TO USE THIS CODE BECAUSE LINK SOMETIMES DOESN'T WORK"
+)
 
 FIRMS = {
     "legion":   ("LEGION FUNDED",    LEGION_TEXT),
     "pipstone": ("PIPSTONE CAPITAL", PIPSTONE_TEXT),
-    "blue":     ("BLUE GUARDIAN",    BLUE_TEXT),
+    "shark":    ("SHARK FUNDED",     SHARK_TEXT),
 }
 # Jin firms par abhi "COMING SOON" hai, un par "Already Buy Under Legit" button nahi dikhega
-COMING_SOON = {"blue"}
+COMING_SOON = set()
 
 # Buttons ke text ke sath chhota icon (Telegram buttons mein asli image nahi lag sakti, emoji lag sakta hai)
 FIRM_EMOJI = {
     "legion": "🔷",
     "pipstone": "⛰️",
-    "blue": "🛡️",
+    "shark": "🦈",
 }
 
-# Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, blue.png, welcome.png)
+# Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, shark.png, welcome.png)
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logos")
 LOGO_FILES = {
     "legion": "legion.png",
     "pipstone": "pipstone.png",
-    "blue": "blue.png",
+    "shark": "shark.png",
     "welcome": "welcome.png",  # pehli screen ka banner (logos ka collage)
 }
 # ===========================================
@@ -893,7 +899,7 @@ def main():
         entry_points=[CommandHandler("start", start)],
         states={
             WELCOME: [
-                CallbackQueryHandler(pick_firm, pattern=r"^firm_(legion|pipstone|blue)$"),
+                CallbackQueryHandler(pick_firm, pattern=r"^firm_(legion|pipstone|shark)$"),
                 CallbackQueryHandler(funded_buy, pattern=r"^new_buy$"),
                 CallbackQueryHandler(already_buy, pattern=r"^already_buy$"),
                 CallbackQueryHandler(back_to_firms, pattern=r"^back_firms$"),
