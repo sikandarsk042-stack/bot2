@@ -2,8 +2,8 @@
 GOLD INSIGHT - PROP FIRM - Verification Bot (Google Sheet dropdown se approval)
 -------------------------------------------------------------------------
 User ka flow:
-1. /start -> Welcome message + 5 buttons:
-      LEGION FUNDED / PIPSTONE CAPITAL / SHARK FUNDED / BLUEBERRY FUNDED / CONTACT SUPPORT TEAM
+1. /start -> Welcome message + 4 buttons:
+      LEGION FUNDED / PIPSTONE CAPITAL / SHARK FUNDED / CONTACT SUPPORT TEAM
    - Prop firm button dabane par 2 buttons aate hain (upar firm ka caption):
         New Buy Funded Account -> us firm ka funded challenge link
         Already Purchased (Legit) -> verification flow shuru (neeche step 2 se)
@@ -15,11 +15,13 @@ User ka flow:
 6. Confirm par data Google Sheet mein "Pending" status ke sath save hota hai
 
 Admin ka flow (Sheet ke Status dropdown se):
-- Approved -> user ko private group ka invite link
+- Approved -> user ko CHANNELS list ke SAARE channels ke invite links (isi order mein):
+              1) GOLD INSIGHT - PROP FIRM
+              2) LEGIT FUNDED CLUB
 - Rejected -> user ko message: "details mein masla hai, support team se contact karein"
               (channel se nahi nikalta)
-- Removed  -> invite link cancel + user ko channel se nikalta hai + message
-- Removed/Rejected ke baad dobara Approved -> naya invite link
+- Removed  -> invite links cancel + user ko SAARE channels se nikalta hai + message
+- Removed/Rejected ke baad dobara Approved -> naye invite links
 Bot har 30 second mein sheet check karta hai.
 
 Duplicate se bachao:
@@ -68,6 +70,15 @@ SUPPORT_USERNAME = "LegitFundedTeam"                      # support ki ID (bina 
 GOOGLE_CREDENTIALS_FILE = "credentials.json"  # sirf apne computer par test ke liye
 POLL_SECONDS = 30  # bot kitni dair baad sheet check kare
 
+# Approved hone par user ko in SAARE channels ke links milte hain (aur Removed par
+# user in SAARE channels se nikalta hai). List ka ORDER = user ko links ka order.
+# "col": sheet ka wo column jahan us channel ka invite link save hota hai.
+# Bot in sab channels mein ADMIN hona chahiye.
+CHANNELS = [
+    {"id": PRIVATE_GROUP_CHAT_ID, "name": "GOLD INSIGHT - PROP FIRM", "col": "Invite Link"},
+    {"id": -1004470793687, "name": "LEGIT FUNDED CLUB", "col": "Invite Link 2"},
+]
+
 # Prop firms: key -> (button par jo naam dikhe, "New Buy Funded Account" par dikhne wala message)
 # Message HTML format mein hai: <b>bold</b>, <a href="link">text</a>
 LEGION_TEXT = (
@@ -102,16 +113,10 @@ SHARK_TEXT = (
     "NOTE:- MANDATORY TO USE THIS CODE BECAUSE LINK SOMETIMES DOESN'T WORK"
 )
 
-BLUEBERRY_TEXT = (
-    "<b>BLUEBERRY FUNDED</b>\n\n"
-    "🫐 LINK :- https://affiliates.blueberryfunded.com/Tracking/click/?affid=52035&amp;campaign=12246&amp;product_id=1&amp;t_type=HomePage&amp;t_lang=EN"
-)
-
 FIRMS = {
     "legion":   ("LEGION FUNDED",    LEGION_TEXT),
     "pipstone": ("PIPSTONE CAPITAL", PIPSTONE_TEXT),
     "shark":    ("SHARK FUNDED",     SHARK_TEXT),
-    "blueberry": ("BLUEBERRY FUNDED", BLUEBERRY_TEXT),
 }
 # Jin firms par abhi "COMING SOON" hai, un par "Already Buy Under Legit" button nahi dikhega
 COMING_SOON = set()
@@ -121,16 +126,14 @@ FIRM_EMOJI = {
     "legion": "🔷",
     "pipstone": "⛰️",
     "shark": "🦈",
-    "blueberry": "🫐",
 }
 
-# Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, shark.png, blueberry.png, welcome.png)
+# Firm logos: bot.py ke saath "logos" folder mein rakho (legion.png, pipstone.png, shark.png, welcome.png)
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logos")
 LOGO_FILES = {
     "legion": "legion.png",
     "pipstone": "pipstone.png",
     "shark": "shark.png",
-    "blueberry": "blueberry.png",
     "welcome": "welcome.png",  # pehli screen ka banner (logos ka collage)
 }
 # ===========================================
@@ -203,7 +206,7 @@ def duplicate_reply(kind):
 # ---------------- Google Sheet helpers ----------------
 HEADERS = [
     "Date", "Telegram ID", "Username", "Name", "Email", "Prop Firm",
-    "Account Size", "Status", "Bot Action", "Invite Link",
+    "Account Size", "Status", "Bot Action", "Invite Link", "Invite Link 2",
 ]
 COL = {h: i for i, h in enumerate(HEADERS)}  # 0-based column index
 STATUS_OPTIONS = ["Pending", "Approved", "Rejected", "Removed"]
@@ -248,6 +251,10 @@ def get_sheet():
             if "Investor Password" in old_header:
                 ws.delete_columns(old_header.index("Investor Password") + 1)
                 logger.info("Sheet se purana 'Investor Password' column hata diya gaya")
+
+            # Sheet mein itne columns hon ke saare headers aa jayein
+            if ws.col_count < len(HEADERS):
+                ws.add_cols(len(HEADERS) - ws.col_count)
 
             # Header row
             ws.update(values=[HEADERS], range_name=f"A1:{rowcol_to_a1(1, len(HEADERS))}")
@@ -402,12 +409,14 @@ def read_rows():
         return get_sheet().get_all_values()
 
 
-def write_action(row, text, link=None):
-    """'Bot Action' mein likho ke bot ne kya kiya; link ho to 'Invite Link' mein bhi."""
+def write_action(row, text, links=None):
+    """'Bot Action' mein likho ke bot ne kya kiya; links ho to unke apne columns mein bhi.
+    links: {column ka naam: link}, jaise {"Invite Link": "...", "Invite Link 2": "..."}"""
     with _lock:
         data = [{"range": rowcol_to_a1(row, COL["Bot Action"] + 1), "values": [[text]]}]
-        if link:
-            data.append({"range": rowcol_to_a1(row, COL["Invite Link"] + 1), "values": [[link]]})
+        for col_name, link in (links or {}).items():
+            if link:
+                data.append({"range": rowcol_to_a1(row, COL[col_name] + 1), "values": [[link]]})
         get_sheet().batch_update(data)
 
 
@@ -437,7 +446,7 @@ async def check_sheet(application):
         name = r[COL["Name"]]
         status = r[COL["Status"]].strip()
         action = r[COL["Bot Action"]].strip()
-        link = r[COL["Invite Link"]].strip()
+        old_links = {ch["col"]: r[COL[ch["col"]]].strip() for ch in CHANNELS}
 
         # Sirf Approved/Rejected/Removed, aur sirf tab jab bot is status par pehle kaam na kar chuka ho
         if status not in ("Approved", "Rejected", "Removed"):
@@ -451,23 +460,28 @@ async def check_sheet(application):
             await asyncio.to_thread(write_action, row_num, f"{status}: FAILED - Telegram ID galat hai")
             continue
 
-        new_link = None
+        new_links = {}
         try:
             if status == "Approved":
-                invite = await application.bot.create_chat_invite_link(
-                    chat_id=PRIVATE_GROUP_CHAT_ID,
-                    member_limit=1,  # sirf ek dafa use ho sake
-                )
-                new_link = invite.invite_link
+                # Har channel ka ek invite link (CHANNELS list ke order mein)
+                lines = []
+                for ch in CHANNELS:
+                    invite = await application.bot.create_chat_invite_link(
+                        chat_id=ch["id"],
+                        member_limit=1,  # sirf ek dafa use ho sake
+                    )
+                    new_links[ch["col"]] = invite.invite_link
+                    lines.append(f"👑 <b>{escape(ch['name'])}</b>:\n{invite.invite_link}")
                 await application.bot.send_message(
                     chat_id=user_id,
                     text=(
-                        f"🎉 You're in! Your details have been verified.\n\n"
-                        f"Here's your access link to <b>{escape(CLUB_NAME)}</b>:\n{new_link}"
+                        "🎉 You're in! Your details have been verified.\n\n"
+                        "Here are your access links 👇\n\n"
+                        + "\n\n".join(lines)
                     ),
                     parse_mode="HTML",
                 )
-                result = "Link sent"
+                result = f"Links sent ({len(CHANNELS)} channels)"
 
             elif status == "Rejected":
                 # Sirf message: details mein masla hai, support se contact karein
@@ -480,19 +494,21 @@ async def check_sheet(application):
                 result = "Message sent (contact support)"
 
             else:  # Removed
-                was_approved = bool(link) or handled_status(action) == "Approved"
+                was_approved = any(old_links.values()) or handled_status(action) == "Approved"
                 if was_approved:
-                    # Pehle wala invite link cancel karo (agar user ne abhi join nahi kiya)
-                    if link:
-                        try:
-                            await application.bot.revoke_chat_invite_link(PRIVATE_GROUP_CHAT_ID, link)
-                        except Exception as e:
-                            logger.info(f"Row {row_num}: link revoke nahi hua ({e})")
-                    # Group se nikalo: ban + turant unban (taake baad mein naye link se aa sake)
-                    await application.bot.ban_chat_member(PRIVATE_GROUP_CHAT_ID, user_id)
-                    await application.bot.unban_chat_member(
-                        PRIVATE_GROUP_CHAT_ID, user_id, only_if_banned=True
-                    )
+                    for ch in CHANNELS:
+                        # Pehle wala invite link cancel karo (agar user ne abhi join nahi kiya)
+                        link = old_links.get(ch["col"])
+                        if link:
+                            try:
+                                await application.bot.revoke_chat_invite_link(ch["id"], link)
+                            except Exception as e:
+                                logger.info(f"Row {row_num}: {ch['name']} ka link revoke nahi hua ({e})")
+                        # Channel se nikalo: ban + turant unban (taake baad mein naye link se aa sake)
+                        await application.bot.ban_chat_member(ch["id"], user_id)
+                        await application.bot.unban_chat_member(
+                            ch["id"], user_id, only_if_banned=True
+                        )
                 await application.bot.send_message(
                     chat_id=user_id,
                     text=REMOVED_TEXT,
@@ -500,7 +516,7 @@ async def check_sheet(application):
                     reply_markup=support_markup(),
                 )
                 result = (
-                    "User removed from channel, message sent"
+                    "User removed from channels, message sent"
                     if was_approved
                     else "Message sent (user was not in channel)"
                 )
@@ -512,7 +528,7 @@ async def check_sheet(application):
                 application, f"⚠️ Sheet row {row_num} ({name}): {status} action failed.\n{e}"
             )
 
-        await asyncio.to_thread(write_action, row_num, result, new_link)
+        await asyncio.to_thread(write_action, row_num, result, new_links)
 
 
 async def sheet_watcher(application):
@@ -907,7 +923,7 @@ def main():
         entry_points=[CommandHandler("start", start)],
         states={
             WELCOME: [
-                CallbackQueryHandler(pick_firm, pattern=r"^firm_(legion|pipstone|shark|blueberry)$"),
+                CallbackQueryHandler(pick_firm, pattern=r"^firm_(legion|pipstone|shark)$"),
                 CallbackQueryHandler(funded_buy, pattern=r"^new_buy$"),
                 CallbackQueryHandler(already_buy, pattern=r"^already_buy$"),
                 CallbackQueryHandler(back_to_firms, pattern=r"^back_firms$"),
