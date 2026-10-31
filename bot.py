@@ -24,6 +24,15 @@ Admin ka flow (Sheet ke Status dropdown se):
 - Removed/Rejected ke baad dobara Approved -> naye invite links
 Bot har 30 second mein sheet check karta hai.
 
+Custom message (Status se bilkul alag):
+- Kisi user ki row ke "Custom Message" column mein koi bhi text likho
+- 30 second ke andar bot wo text us user ko bhej deta hai
+- "Message Status" mein "Sent <time>" ya fail hone ki wajah likhi aati hai
+- "Message Handled" us text ko yaad rakhta hai jo bhej diya gaya, taake wahi text dobara na jaye.
+  Doosra message bhejna ho to bas "Custom Message" ka text badal do.
+- Bhejna fail ho jaye (jaise user ne bot block kiya) to bot loop mein dobara try nahi karta:
+  message edit karo (ek space + koi character laga do) to dobara try karega.
+
 Duplicate se bachao:
 - Ek Telegram account ki sheet mein sirf ek row hoti hai
 - Pending/Approved user dobara submit nahi kar sakta
@@ -156,6 +165,10 @@ WELCOME_TEXT = (
 )
 
 
+# Telegram ek message mein zyada se zyada 4096 characters allow karta hai
+TG_MAX_LEN = 4000
+
+
 # ---------------- User ko jane wale messages ----------------
 def support_markup():
     return InlineKeyboardMarkup([[
@@ -207,6 +220,7 @@ def duplicate_reply(kind):
 HEADERS = [
     "Date", "Telegram ID", "Username", "Name", "Email", "Prop Firm",
     "Account Size", "Status", "Bot Action", "Invite Link", "Invite Link 2",
+    "Custom Message", "Message Status", "Message Handled",
 ]
 COL = {h: i for i, h in enumerate(HEADERS)}  # 0-based column index
 STATUS_OPTIONS = ["Pending", "Approved", "Rejected", "Removed"]
@@ -409,15 +423,57 @@ def read_rows():
         return get_sheet().get_all_values()
 
 
-def write_action(row, text, links=None):
+def locate_row(ws, row, user_id):
+    """Wo row number batao jo is waqt asal mein is Telegram ID ki hai.
+    Agar sheet parhne ke baad sort ho gayi to row number badal sakta hai:
+    us surat mein Telegram ID se row dobara dhoondi jati hai. Na mile to None."""
+    if user_id is None:
+        return row
+    ids = ws.col_values(COL["Telegram ID"] + 1)  # 1-based list, index 0 = header
+    if row - 1 < len(ids) and ids[row - 1].strip() == str(user_id):
+        return row
+    found = None
+    for i, v in enumerate(ids[1:], start=2):
+        if v.strip() == str(user_id):
+            found = i
+    if found is None:
+        logger.error(f"Telegram ID {user_id} sheet mein nahi mili, write skip kiya")
+        return None
+    logger.info(f"Row {row} -> {found} ho gayi (sheet sort hui thi)")
+    return found
+
+
+def write_action(row, text, links=None, user_id=None):
     """'Bot Action' mein likho ke bot ne kya kiya; links ho to unke apne columns mein bhi.
-    links: {column ka naam: link}, jaise {"Invite Link": "...", "Invite Link 2": "..."}"""
+    links: {column ka naam: link}, jaise {"Invite Link": "...", "Invite Link 2": "..."}
+    user_id: de diya jaye to likhne se theek pehle row Telegram ID se dobara dhoondi jati hai,
+             taake beech mein sheet sort ho jaye to galat user ki row mein na likha jaye."""
     with _lock:
+        ws = get_sheet()
+        row = locate_row(ws, row, user_id)
+        if row is None:
+            return
         data = [{"range": rowcol_to_a1(row, COL["Bot Action"] + 1), "values": [[text]]}]
         for col_name, link in (links or {}).items():
             if link:
                 data.append({"range": rowcol_to_a1(row, COL[col_name] + 1), "values": [[link]]})
-        get_sheet().batch_update(data)
+        ws.batch_update(data, value_input_option="RAW")
+
+
+def write_message_result(row, user_id, status_text, handled_text):
+    """Custom message process hone ke baad: 'Message Status' aur 'Message Handled' likho."""
+    with _lock:
+        ws = get_sheet()
+        row = locate_row(ws, row, user_id)
+        if row is None:
+            return
+        ws.batch_update(
+            [
+                {"range": rowcol_to_a1(row, COL["Message Status"] + 1), "values": [[status_text]]},
+                {"range": rowcol_to_a1(row, COL["Message Handled"] + 1), "values": [[handled_text]]},
+            ],
+            value_input_option="RAW",
+        )
 
 
 # ---------------- Sheet watcher ----------------
@@ -438,11 +494,50 @@ async def notify_admin(application, text, parse_mode=None):
             logger.error(f"Admin notify error (ID {admin_id}): {e}")
 
 
+async def handle_custom_message(application, row_num, r):
+    """'Custom Message' cell mein naya text ho to wo us row ke user ko bhejo.
+    Iska Status se koi talluq nahi."""
+    message = r[COL["Custom Message"]].strip()
+    handled = r[COL["Message Handled"]].strip()
+    if not message or message == handled:
+        return  # kuch likha nahi, ya yehi text pehle hi process ho chuka hai
+
+    name = r[COL["Name"]]
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    try:
+        user_id = int(r[COL["Telegram ID"]])
+    except ValueError:
+        await asyncio.to_thread(
+            write_message_result, row_num, None, "FAILED - Telegram ID galat hai", message
+        )
+        return
+
+    try:
+        # Seedha text (formatting ke baghair), Telegram ki limit se lamba ho to tukde kar do
+        for i in range(0, len(message), TG_MAX_LEN):
+            await application.bot.send_message(chat_id=user_id, text=message[i:i + TG_MAX_LEN])
+        status_text = f"Sent {stamp}"
+    except Exception as e:
+        logger.error(f"Row {row_num} custom message error: {e}")
+        status_text = f"FAILED - {e} (dobara try ke liye message edit karein)"
+        await notify_admin(
+            application, f"⚠️ Sheet row {row_num} ({name}): custom message failed.\n{e}"
+        )
+
+    # Dono surat mein "handled" save hota hai, taake bot loop mein dobara try na kare
+    await asyncio.to_thread(write_message_result, row_num, user_id, status_text, message)
+
+
 async def check_sheet(application):
     rows = await asyncio.to_thread(read_rows)
 
     for row_num, r in enumerate(rows[1:], start=2):  # header chhor kar
         r = r + [""] * (len(HEADERS) - len(r))
+
+        # Custom message (kisi bhi status par chalta hai, status khali ho tab bhi)
+        await handle_custom_message(application, row_num, r)
+
         name = r[COL["Name"]]
         status = r[COL["Status"]].strip()
         action = r[COL["Bot Action"]].strip()
@@ -528,7 +623,7 @@ async def check_sheet(application):
                 application, f"⚠️ Sheet row {row_num} ({name}): {status} action failed.\n{e}"
             )
 
-        await asyncio.to_thread(write_action, row_num, result, new_links)
+        await asyncio.to_thread(write_action, row_num, result, new_links, user_id)
 
 
 async def sheet_watcher(application):
