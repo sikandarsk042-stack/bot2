@@ -384,12 +384,17 @@ def save_request(user_id, username, name, email, propfirm, size):
     """
     Request save karo. Duplicate ho to DuplicateError uthata hai.
     Return: "new" (nayi row) ya "resubmitted" (Rejected wali row update hui).
+
+    FIX: append_row hata diya (wo table ki hudood ghalat andaza lagata tha aur data
+    agle columns mein chala jata tha). Ab next row khud nikalte hain aur hamesha
+    column A se likhte hain, is liye column kabhi shift nahi hota.
     """
     with _lock:
         ws = get_sheet()
+        all_rows = ws.get_all_values()
         kind, row_num = None, None
         if user_id not in SKIP_DUPLICATE_CHECK_FOR:
-            kind, row_num = find_conflict(ws.get_all_values(), user_id)
+            kind, row_num = find_conflict(all_rows, user_id)
         if kind in ("pending", "approved", "removed"):
             raise DuplicateError(kind)
 
@@ -404,17 +409,33 @@ def save_request(user_id, username, name, email, propfirm, size):
             "Status": "Pending",
         }
         row = [values.get(h, "") for h in HEADERS[: COL["Status"] + 1]]
+        last = rowcol_to_a1(1, COL["Status"] + 1)[:-1]  # Status column ka letter, jaise "H"
 
         if kind == "resubmit":
-            last = rowcol_to_a1(row_num, COL["Status"] + 1)
-            ws.batch_update([
-                {"range": f"A{row_num}:{last}", "values": [row]},
-                # purana "Bot Action" saaf karo, taake naye status par bot dobara kaam kare
-                {"range": rowcol_to_a1(row_num, COL["Bot Action"] + 1), "values": [[""]]},
-            ])
+            ws.batch_update(
+                [
+                    {"range": f"A{row_num}:{last}{row_num}", "values": [row]},
+                    # purana "Bot Action" saaf karo, taake naye status par bot dobara kaam kare
+                    {"range": rowcol_to_a1(row_num, COL["Bot Action"] + 1), "values": [[""]]},
+                ],
+                value_input_option="RAW",
+            )
             return "resubmitted"
 
-        ws.append_row(row, value_input_option="RAW")  # RAW: user ka text formula na ban jaye
+        # NAYI ROW: Telegram ID column ki aakhri filled row ke baad wali row
+        ids = ws.col_values(COL["Telegram ID"] + 1)  # index 0 = header
+        next_row = max(len(ids), 1) + 1
+
+        # Sheet mein row na ho to barha do
+        if next_row > ws.row_count:
+            ws.add_rows(next_row - ws.row_count + 20)
+
+        # Hamesha column A se likho, is liye column shift nahi ho sakta
+        ws.update(
+            values=[row],
+            range_name=f"A{next_row}:{last}{next_row}",
+            value_input_option="RAW",  # RAW: user ka text formula na ban jaye
+        )
         return "new"
 
 
